@@ -1,0 +1,12 @@
+/* Custom helper styles */
+.min-vh-50 {
+  min-height: 50vh;
+}
+
+.text-xxs {
+  font-size: 0.75rem;
+}
+
+.bg-body-tertiary {
+  transition: background-color 0.3s ease;
+}
