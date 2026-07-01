@@ -58,5 +58,5 @@ USER django
 # Expose port 8000
 EXPOSE 8000
 
-# Start Gunicorn server with production parameters
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "3", "--threads", "2", "--timeout", "60", "--access-logfile", "-", "--error-logfile", "-", "lead_management.wsgi:application"]
+# Run migrations and start Gunicorn server
+CMD ["sh", "-c", "python manage.py migrate && gunicorn --bind 0.0.0.0:8000 --workers 3 --threads 2 --timeout 60 --access-logfile - --error-logfile - lead_management.wsgi:application"]
