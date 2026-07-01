@@ -9,6 +9,7 @@ export default function Login() {
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [isRegistering, setIsRegistering] = useState(false);
@@ -121,14 +122,23 @@ export default function Login() {
                 <i className="bi bi-lock"></i>
               </span>
               <input 
-                type="password" 
+                type={showPassword ? "text" : "password"} 
                 id="password" 
-                className="form-control border-start-0" 
+                className="form-control border-start-0 border-end-0" 
                 value={password}
                 onChange={e => setPassword(e.target.value)}
                 placeholder="Enter password"
                 required 
               />
+              <button
+                type="button"
+                className="input-group-text bg-transparent border-start-0 text-secondary"
+                onClick={() => setShowPassword(!showPassword)}
+                style={{ borderTopLeftRadius: 0, borderBottomLeftRadius: 0, cursor: 'pointer' }}
+                aria-label={showPassword ? "Hide password" : "Show password"}
+              >
+                <i className={`bi ${showPassword ? 'bi-eye-slash' : 'bi-eye'}`}></i>
+              </button>
             </div>
           </div>
 

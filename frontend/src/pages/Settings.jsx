@@ -9,6 +9,8 @@ export default function Settings() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [profileSuccess, setProfileSuccess] = useState('');
   const [profileError, setProfileError] = useState('');
   const [profileUpdating, setProfileUpdating] = useState(false);
@@ -173,26 +175,48 @@ export default function Settings() {
 
               <div className="mb-3">
                 <label htmlFor="profile-pass" className="form-label small fw-semibold text-secondary">New Password</label>
-                <input 
-                  type="password" 
-                  id="profile-pass" 
-                  className="form-control" 
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  placeholder="Leave blank to keep current password"
-                />
+                <div className="input-group">
+                  <input 
+                    type={showPassword ? "text" : "password"} 
+                    id="profile-pass" 
+                    className="form-control border-end-0" 
+                    value={password}
+                    onChange={e => setPassword(e.target.value)}
+                    placeholder="Leave blank to keep current password"
+                  />
+                  <button
+                    type="button"
+                    className="input-group-text bg-transparent border-start-0 text-secondary"
+                    onClick={() => setShowPassword(!showPassword)}
+                    style={{ borderTopLeftRadius: 0, borderBottomLeftRadius: 0, cursor: 'pointer' }}
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                  >
+                    <i className={`bi ${showPassword ? 'bi-eye-slash' : 'bi-eye'}`}></i>
+                  </button>
+                </div>
               </div>
 
               <div className="mb-4">
                 <label htmlFor="profile-confirm" className="form-label small fw-semibold text-secondary">Confirm New Password</label>
-                <input 
-                  type="password" 
-                  id="profile-confirm" 
-                  className="form-control" 
-                  value={confirmPassword}
-                  onChange={e => setConfirmPassword(e.target.value)}
-                  placeholder="Repeat new password"
-                />
+                <div className="input-group">
+                  <input 
+                    type={showConfirmPassword ? "text" : "password"} 
+                    id="profile-confirm" 
+                    className="form-control border-end-0" 
+                    value={confirmPassword}
+                    onChange={e => setConfirmPassword(e.target.value)}
+                    placeholder="Repeat new password"
+                  />
+                  <button
+                    type="button"
+                    className="input-group-text bg-transparent border-start-0 text-secondary"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    style={{ borderTopLeftRadius: 0, borderBottomLeftRadius: 0, cursor: 'pointer' }}
+                    aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+                  >
+                    <i className={`bi ${showConfirmPassword ? 'bi-eye-slash' : 'bi-eye'}`}></i>
+                  </button>
+                </div>
               </div>
 
               <button type="submit" className="btn btn-primary btn-sm px-4 py-2 w-100 fw-semibold text-white" disabled={profileUpdating}>
