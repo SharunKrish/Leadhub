@@ -109,6 +109,8 @@ if os.environ.get('DATABASE_URL'):
         conn_max_age=600,
         ssl_require=os.environ.get('DATABASE_SSL_REQUIRE', 'False').lower() in ('true', '1', 't')
     )
+    # Add a connection timeout of 10 seconds to prevent indefinite hanging
+    DATABASES['default'].setdefault('OPTIONS', {})['connect_timeout'] = 10
 
 
 # Password validation
