@@ -199,3 +199,14 @@ class AuthAPITests(APITestCase):
         response = self.client.post(url, data, format='json')
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
+
+class PingAPITests(APITestCase):
+    def test_ping_endpoint(self):
+        url = reverse('ping')
+        # The ping endpoint should be accessible without credentials
+        self.client.credentials()
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data, {"status": "healthy"})
+
+
