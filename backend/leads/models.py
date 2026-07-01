@@ -1,5 +1,6 @@
 from django.db import models
 from django.core.validators import RegexValidator
+from django.contrib.auth.models import User
 
 class Lead(models.Model):
     SOURCE_CHOICES = [
@@ -20,12 +21,13 @@ class Lead(models.Model):
         message="Phone number must be entered in the format: '+999999999'. Up to 15 digits allowed."
     )
 
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='leads', null=True, blank=True)
     name = models.CharField(max_length=100)
-    email = models.EmailField(unique=True)
+    email = models.EmailField()
     phone_number = models.CharField(validators=[phone_regex], max_length=17)
-    lead_source = models.CharField(max_length=20, choices=SOURCE_CHOICES, default='organic')
-    lead_status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='new')
-    created_date = models.DateTimeField(auto_now_add=True)
+    lead_source = models.CharField(max_length=20, choices=SOURCE_CHOICES, default='organic', db_index=True)
+    lead_status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='new', db_index=True)
+    created_date = models.DateTimeField(auto_now_add=True, db_index=True)
     updated_date = models.DateTimeField(auto_now=True)
 
     def __str__(self):
@@ -33,6 +35,9 @@ class Lead(models.Model):
 
     class Meta:
         ordering = ['-created_date']
+        constraints = [
+            models.UniqueConstraint(fields=['user', 'email'], name='unique_user_lead_email')
+        ]
 
 class LeadNote(models.Model):
     lead = models.ForeignKey(Lead, on_delete=models.CASCADE, related_name='notes')

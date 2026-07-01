@@ -10,6 +10,55 @@ import {
   getExcelExportUrl 
 } from '../services/api';
 
+// Custom Dropdown Component matching the modern popup aesthetic
+function CustomSelect({ value, onChange, options, isSmall = false }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = React.useRef(null);
+
+  useEffect(() => {
+    const handleClose = (e) => {
+      if (containerRef.current && !containerRef.current.contains(e.target)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClose);
+    return () => document.removeEventListener('mousedown', handleClose);
+  }, []);
+
+  const selectedOption = options.find(opt => opt.value === value) || options[0] || { label: '', value: '' };
+
+  return (
+    <div className="custom-select-wrapper" ref={containerRef}>
+      <button
+        type="button"
+        className={`custom-select-trigger ${isSmall ? 'custom-select-trigger-sm' : ''} ${isOpen ? 'open' : ''}`}
+        onClick={() => setIsOpen(!isOpen)}
+      >
+        <span className="text-truncate">{selectedOption.label}</span>
+        <i className="bi bi-chevron-expand trigger-chevron"></i>
+      </button>
+
+      {isOpen && (
+        <div className="custom-select-options-container animate-fade-in">
+          {options.map(opt => (
+            <button
+              key={opt.value}
+              type="button"
+              className={`custom-select-option border-0 w-100 ${opt.value === value ? 'active' : ''}`}
+              onClick={() => {
+                onChange(opt.value);
+                setIsOpen(false);
+              }}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function LeadManagement() {
   // Lists and stats states
   const [leads, setLeads] = useState([]);
@@ -19,11 +68,14 @@ export default function LeadManagement() {
 
   // Filters state
   const [search, setSearch] = useState('');
-  const [source, setSource] = useState('');
+  const [source, setSource] = useState(() => localStorage.getItem('leadhub_default_source') || '');
   const [status, setStatus] = useState('');
-  const [ordering, setOrdering] = useState('-created_date');
+  const [ordering, setOrdering] = useState(() => localStorage.getItem('leadhub_default_ordering') || '-created_date');
   const [page, setPage] = useState(1);
-  const pageSize = 20;
+  const [pageSize, setPageSize] = useState(() => {
+    const saved = localStorage.getItem('leadhub_default_page_size');
+    return saved ? parseInt(saved, 10) : 20;
+  });
 
   // Active inputs / trigger states for debouncing search
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -75,7 +127,8 @@ export default function LeadManagement() {
         source: source || undefined,
         status: status || undefined,
         ordering: ordering || undefined,
-        page: page
+        page: page,
+        page_size: pageSize
       };
       const data = await getLeads(params);
       setLeads(data.results);
@@ -234,14 +287,24 @@ export default function LeadManagement() {
     setCSVImportResult(null);
     try {
       const res = await importLeadsCSV(csvFile);
-      setCSVImportResult(res);
       fetchLeadsList();
+      
+      if (res.errors && res.errors.length > 0) {
+        alert(`Import complete! ${res.success_count} leads successfully imported. ${res.errors.length} errors encountered.`);
+      } else {
+        alert(`Successfully imported ${res.success_count} leads!`);
+      }
+      
+      setShowCSVModal(false);
+      setCSVFile(null);
+      setCSVImportResult(null);
     } catch (err) {
       console.error(err);
       setCSVImportResult({
         success_count: 0,
         errors: ["Failed to upload or parse CSV. Check file format."]
       });
+      alert("Failed to upload or parse CSV. Please check the file format.");
     } finally {
       setCSVSubmitting(false);
     }
@@ -270,34 +333,95 @@ export default function LeadManagement() {
 
   const totalPages = Math.ceil(count / pageSize);
 
+  const renderPaginationItems = () => {
+    const items = [];
+    const maxVisiblePages = 5;
+    
+    // Always show first page
+    items.push(1);
+    
+    let startPage = Math.max(2, page - 1);
+    let endPage = Math.min(totalPages - 1, page + 1);
+    
+    if (page <= 3) {
+      endPage = Math.min(totalPages - 1, maxVisiblePages - 1);
+    }
+    if (page >= totalPages - 2) {
+      startPage = Math.max(2, totalPages - maxVisiblePages + 2);
+    }
+    
+    if (startPage > 2) {
+      items.push('ellipsis1');
+    }
+    
+    for (let i = startPage; i <= endPage; i++) {
+      items.push(i);
+    }
+    
+    if (endPage < totalPages - 1) {
+      items.push('ellipsis2');
+    }
+    
+    if (totalPages > 1) {
+      // Always show last page
+      items.push(totalPages);
+    }
+    
+    return items.map((item, index) => {
+      if (item === 'ellipsis1' || item === 'ellipsis2') {
+        return (
+          <li key={`ellipsis-${index}`} className="page-item disabled">
+            <span className="page-link rounded-3 px-2 py-1.5 bg-transparent border-0 text-secondary">...</span>
+          </li>
+        );
+      }
+      return (
+        <li key={item} className={`page-item ${page === item ? 'active' : ''}`}>
+          <button 
+            className={`page-link rounded-3 px-3 py-1.5 ${page === item ? 'bg-primary text-white border-0' : 'bg-transparent border text-secondary'}`} 
+            onClick={() => setPage(item)}
+          >
+            {item}
+          </button>
+        </li>
+      );
+    });
+  };
+
   return (
-    <div className="container-fluid py-4 animate-fade-in">
-      <div className="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+    <div className="position-relative container-fluid py-3 py-md-4 animate-fade-in">
+
+      {/* Header section */}
+      <div className="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4 position-relative" style={{ zIndex: 1 }}>
         <div>
-          <h2 className="fw-bold mb-0">Leads Directory</h2>
-          <p className="text-secondary small">Add, manage, search and filter your customer leads database</p>
+          <h1 className="fw-extrabold tracking-tight mb-1" style={{ fontSize: '1.75rem' }}>Leads Directory</h1>
+          <p className="text-secondary small mb-0">Manage customer interactions, channel filters, and CSV integrations.</p>
         </div>
         <div className="d-flex flex-wrap gap-2">
-          <button onClick={() => setShowCSVModal(true)} className="btn btn-outline-success btn-sm rounded-3 px-3">
-            <i className="bi bi-file-earmark-excel me-1"></i> Import CSV
+          <button onClick={() => setShowCSVModal(true)} className="btn btn-outline-primary btn-sm rounded-3 px-3 py-2 d-flex align-items-center gap-2">
+            <i className="bi bi-file-earmark-arrow-up"></i>
+            <span>Import CSV</span>
           </button>
-          <button onClick={handleExportExcel} className="btn btn-outline-primary btn-sm rounded-3 px-3">
-            <i className="bi bi-download me-1"></i> Export Excel
+          <button onClick={handleExportExcel} className="btn btn-outline-secondary btn-sm rounded-3 px-3 py-2 d-flex align-items-center gap-2">
+            <i className="bi bi-download"></i>
+            <span>Export Excel</span>
           </button>
-          <button onClick={() => handleOpenForm()} className="btn btn-primary btn-sm rounded-3 px-3">
-            <i className="bi bi-plus-lg me-1"></i> Add Lead
+          <button onClick={() => handleOpenForm()} className="btn btn-primary btn-sm rounded-3 px-3 py-2 d-flex align-items-center gap-2">
+            <i className="bi bi-plus-lg"></i>
+            <span>Add New Lead</span>
           </button>
         </div>
       </div>
 
       {error && (
-        <div className="alert alert-danger" role="alert">
+        <div className="alert alert-danger border-0 rounded-4 shadow-sm mb-4" role="alert" style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#f87171' }}>
+          <i className="bi bi-exclamation-triangle-fill me-2"></i>
           {error}
         </div>
       )}
 
       {/* Filters Card */}
-      <div className="card glass-card border-0 mb-4 p-3 shadow-sm">
+      <div className="card glass-card border-0 mb-4 p-3 shadow-sm position-relative" style={{ zIndex: 5, overflow: 'visible' }}>
         <div className="row g-2 align-items-center">
           <div className="col-12 col-md-4">
             <div className="input-group input-group-sm">
@@ -307,7 +431,7 @@ export default function LeadManagement() {
               <input 
                 type="text" 
                 className="form-control border-start-0" 
-                placeholder="Search by name, email, phone..." 
+                placeholder="Search name, email, phone..." 
                 value={search}
                 onChange={e => setSearch(e.target.value)}
               />
@@ -320,50 +444,53 @@ export default function LeadManagement() {
           </div>
           
           <div className="col-6 col-md-2">
-            <select 
-              className="form-select form-select-sm text-capitalize" 
-              value={source} 
-              onChange={e => { setSource(e.target.value); setPage(1); }}
-            >
-              <option value="">All Sources</option>
-              <option value="facebook">Facebook</option>
-              <option value="google">Google</option>
-              <option value="organic">Organic</option>
-            </select>
+            <CustomSelect
+              isSmall
+              value={source}
+              onChange={val => { setSource(val); setPage(1); }}
+              options={[
+                { value: '', label: 'All Sources' },
+                { value: 'facebook', label: 'Facebook Ads' },
+                { value: 'google', label: 'Google Search' },
+                { value: 'organic', label: 'Organic' }
+              ]}
+            />
           </div>
 
           <div className="col-6 col-md-2">
-            <select 
-              className="form-select form-select-sm text-capitalize" 
-              value={status} 
-              onChange={e => { setStatus(e.target.value); setPage(1); }}
-            >
-              <option value="">All Statuses</option>
-              <option value="new">New</option>
-              <option value="contacted">Contacted</option>
-              <option value="qualified">Qualified</option>
-              <option value="closed">Closed</option>
-            </select>
+            <CustomSelect
+              isSmall
+              value={status}
+              onChange={val => { setStatus(val); setPage(1); }}
+              options={[
+                { value: '', label: 'All Funnels' },
+                { value: 'new', label: 'Incoming' },
+                { value: 'contacted', label: 'In Touch' },
+                { value: 'qualified', label: 'Qualified' },
+                { value: 'closed', label: 'Closed' }
+              ]}
+            />
           </div>
 
           <div className="col-12 col-md-3">
-            <select 
-              className="form-select form-select-sm" 
-              value={ordering} 
-              onChange={e => { setOrdering(e.target.value); setPage(1); }}
-            >
-              <option value="-created_date">Created Date (Newest First)</option>
-              <option value="created_date">Created Date (Oldest First)</option>
-              <option value="name">Name (A-Z)</option>
-              <option value="-name">Name (Z-A)</option>
-              <option value="lead_status">Status (Ascending)</option>
-              <option value="-lead_status">Status (Descending)</option>
-            </select>
+            <CustomSelect
+              isSmall
+              value={ordering}
+              onChange={val => { setOrdering(val); setPage(1); }}
+              options={[
+                { value: '-created_date', label: 'Creation Date (Newest first)' },
+                { value: 'created_date', label: 'Creation Date (Oldest first)' },
+                { value: 'name', label: 'Name (A-Z)' },
+                { value: '-name', label: 'Name (Z-A)' },
+                { value: 'lead_status', label: 'Status stage (Ascending)' },
+                { value: '-lead_status', label: 'Status stage (Descending)' }
+              ]}
+            />
           </div>
           
           <div className="col-12 col-md-1">
             <button 
-              className="btn btn-outline-secondary btn-sm w-100" 
+              className="btn btn-outline-secondary btn-sm w-100 py-1.5" 
               onClick={() => { setSearch(''); setSource(''); setStatus(''); setOrdering('-created_date'); setPage(1); }}
               title="Reset Filters"
             >
@@ -373,45 +500,76 @@ export default function LeadManagement() {
         </div>
       </div>
 
-      {/* Leads Table Card */}
-      <div className="card glass-card border-0 shadow-sm overflow-hidden mb-4">
+      {/* Leads Table Container */}
+      <div className="overflow-hidden mb-4 position-relative" style={{ zIndex: 1 }}>
         {loading ? (
-          <div className="text-center py-5">
-            <div className="spinner-border text-primary spinner-border-sm me-2" role="status"></div>
-            <span className="text-secondary small">Refreshing leads directory...</span>
+          <div className="text-center py-5 glass-card border-0">
+            <div className="spinner-border text-primary spinner-border-sm me-2" role="status" style={{ borderRightColor: 'transparent' }}></div>
+            <span className="text-secondary small fw-semibold">Refreshing leads directory...</span>
           </div>
         ) : leads.length === 0 ? (
-          <div className="text-center py-5">
-            <i className="bi bi-folder-x fs-1 text-secondary"></i>
-            <h5 className="mt-3 fw-bold">No leads found</h5>
-            <p className="text-secondary small px-3">Try adjusting your filters or add a new lead manually.</p>
+          <div className="text-center py-5 px-3 glass-card border-0 bg-transparent">
+            <div className="d-inline-flex align-items-center justify-content-center bg-primary bg-opacity-10 text-primary rounded-circle mb-3" style={{ width: '60px', height: '60px', border: '1px solid rgba(124, 58, 237, 0.15)' }}>
+              <i className="bi bi-folder-x fs-2"></i>
+            </div>
+            <h5 className="fw-bold mb-1">No Leads Found</h5>
+            <p className="text-secondary small mx-auto mb-4" style={{ maxWidth: '320px' }}>
+              We couldn't find any results matching your search terms or filters. Try adjusting them or add a new lead manually.
+            </p>
+            <div className="d-flex justify-content-center gap-2">
+              <button 
+                className="btn btn-sm btn-outline-secondary rounded-3 px-3 py-1.5"
+                onClick={() => { setSearch(''); setSource(''); setStatus(''); setOrdering('-created_date'); setPage(1); }}
+              >
+                Clear Filters
+              </button>
+              <button 
+                className="btn btn-sm btn-primary rounded-3 px-3 py-1.5 text-white"
+                onClick={() => handleOpenForm()}
+              >
+                Add Customer Lead
+              </button>
+            </div>
           </div>
         ) : (
           <div className="table-responsive">
-            <table className="table table-hover align-middle mb-0">
-              <thead className="table-light">
+            <table className="table custom-table align-middle mb-0">
+              <thead className="table-borderless">
                 <tr>
                   <th scope="col" style={{ cursor: 'pointer' }} onClick={() => toggleSort('name')}>
-                    Name {ordering.includes('name') && (ordering.startsWith('-') ? '↓' : '↑')}
+                    Name {ordering.includes('name') && (ordering.startsWith('-') ? ' ↓' : ' ↑')}
                   </th>
                   <th scope="col">Email</th>
                   <th scope="col">Phone</th>
                   <th scope="col">Source</th>
                   <th scope="col">Status</th>
                   <th scope="col" style={{ cursor: 'pointer' }} onClick={() => toggleSort('created_date')}>
-                    Created {ordering.includes('created_date') && (ordering.startsWith('-') ? '↓' : '↑')}
+                    Created {ordering.includes('created_date') && (ordering.startsWith('-') ? ' ↓' : ' ↑')}
                   </th>
-                  <th scope="col" className="text-end px-4">Actions</th>
+                  <th scope="col" className="text-end px-3">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {leads.map(lead => (
                   <tr key={lead.id}>
-                    <td>
-                      <div className="fw-semibold text-body">{lead.name}</div>
+                    <td className="fw-semibold">
+                      <div className="d-flex align-items-center gap-2">
+                        <div className="bg-primary bg-opacity-10 text-primary rounded-circle d-flex align-items-center justify-content-center fw-bold" style={{ width: '32px', height: '32px', fontSize: '0.8rem', border: '1px solid rgba(124, 58, 237, 0.15)' }}>
+                          {lead.name.charAt(0).toUpperCase()}
+                        </div>
+                        <div className="text-truncate" style={{ maxWidth: '140px' }} title={lead.name}>{lead.name}</div>
+                      </div>
                     </td>
-                    <td className="text-secondary small">{lead.email}</td>
-                    <td className="text-secondary small">{lead.phone_number}</td>
+                    <td className="text-secondary small">
+                      <div className="text-truncate" style={{ maxWidth: '160px' }} title={lead.email}>
+                        {lead.email}
+                      </div>
+                    </td>
+                    <td className="text-secondary small">
+                      <div className="text-truncate" style={{ maxWidth: '120px' }} title={lead.phone_number}>
+                        {lead.phone_number}
+                      </div>
+                    </td>
                     <td>
                       <span className="text-capitalize small fw-medium">
                         {lead.lead_source === 'facebook' && <i className="bi bi-facebook text-primary me-1"></i>}
@@ -432,33 +590,33 @@ export default function LeadManagement() {
                         day: 'numeric' 
                       })}
                     </td>
-                    <td className="text-end px-4">
-                      <div className="d-flex justify-content-end gap-1">
+                    <td className="text-end px-3">
+                      <div className="d-flex justify-content-end gap-2">
                         <button 
                           onClick={() => handleOpenNotes(lead)} 
-                          className="btn btn-sm btn-outline-info rounded-circle p-1 d-flex align-items-center justify-content-center"
-                          style={{ width: '28px', height: '28px' }}
+                          className="btn btn-sm btn-outline-primary rounded-circle p-0 d-flex align-items-center justify-content-center position-relative"
+                          style={{ width: '34px', height: '34px' }}
                           title="Notes/Comments"
                         >
-                          <i className="bi bi-journal-text small"></i>
+                          <i className="bi bi-chat-text small"></i>
                           {lead.notes?.length > 0 && (
-                            <span className="position-absolute translate-middle badge rounded-pill bg-danger border border-white text-xxs" style={{ fontSize: '7px', margin: '-10px -10px 0 0' }}>
+                            <span className="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger border border-white text-xxs p-0 d-flex align-items-center justify-content-center" style={{ fontSize: '9px', minWidth: '16px', height: '16px', margin: '-3px 0 0 -3px' }}>
                               {lead.notes.length}
                             </span>
                           )}
                         </button>
                         <button 
                           onClick={() => handleOpenForm(lead)} 
-                          className="btn btn-sm btn-outline-warning rounded-circle p-1 d-flex align-items-center justify-content-center"
-                          style={{ width: '28px', height: '28px' }}
+                          className="btn btn-sm btn-outline-warning rounded-circle p-0 d-flex align-items-center justify-content-center"
+                          style={{ width: '34px', height: '34px' }}
                           title="Edit"
                         >
                           <i className="bi bi-pencil-square small"></i>
                         </button>
                         <button 
                           onClick={() => handleDeleteLead(lead.id, lead.name)} 
-                          className="btn btn-sm btn-outline-danger rounded-circle p-1 d-flex align-items-center justify-content-center"
-                          style={{ width: '28px', height: '28px' }}
+                          className="btn btn-sm btn-outline-danger rounded-circle p-0 d-flex align-items-center justify-content-center"
+                          style={{ width: '34px', height: '34px' }}
                           title="Delete"
                         >
                           <i className="bi bi-trash-fill small"></i>
@@ -475,22 +633,18 @@ export default function LeadManagement() {
 
       {/* Pagination Controls */}
       {totalPages > 1 && !loading && (
-        <div className="d-flex justify-content-between align-items-center mb-4">
+        <div className="d-flex flex-column flex-sm-row justify-content-between align-items-center gap-3 mb-4 position-relative" style={{ zIndex: 1 }}>
           <div className="text-secondary small">
             Showing Page <strong>{page}</strong> of <strong>{totalPages}</strong> ({count} total leads)
           </div>
           <nav aria-label="Page navigation">
-            <ul className="pagination pagination-sm mb-0">
+            <ul className="pagination pagination-sm mb-0 gap-1">
               <li className={`page-item ${page === 1 ? 'disabled' : ''}`}>
-                <button className="page-link" onClick={() => setPage(page - 1)}>Previous</button>
+                <button className="page-link rounded-3 px-3 py-1.5 bg-transparent border text-secondary" onClick={() => setPage(page - 1)}>Previous</button>
               </li>
-              {[...Array(totalPages).keys()].map(p => (
-                <li key={p + 1} className={`page-item ${page === p + 1 ? 'active' : ''}`}>
-                  <button className="page-link" onClick={() => setPage(p + 1)}>{p + 1}</button>
-                </li>
-              ))}
+              {renderPaginationItems()}
               <li className={`page-item ${page === totalPages ? 'disabled' : ''}`}>
-                <button className="page-link" onClick={() => setPage(page + 1)}>Next</button>
+                <button className="page-link rounded-3 px-3 py-1.5 bg-transparent border text-secondary" onClick={() => setPage(page + 1)}>Next</button>
               </li>
             </ul>
           </nav>
@@ -499,9 +653,9 @@ export default function LeadManagement() {
 
       {/* Lead Create/Edit Modal */}
       {showFormModal && (
-        <div className="modal show d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
-          <div className="modal-dialog modal-dialog-centered">
-            <div className="modal-content glass-card p-2 border-0">
+        <div className="modal show d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', zIndex: 1050 }} onClick={() => setShowFormModal(false)}>
+          <div className="modal-dialog" onClick={e => e.stopPropagation()}>
+            <div className="modal-content glass-card p-3 border-0" style={{ overflow: 'visible' }}>
               <div className="modal-header border-0 pb-0">
                 <h5 className="modal-title fw-bold">
                   {editingLead ? "Edit Customer Lead" : "Create New Lead"}
@@ -511,44 +665,48 @@ export default function LeadManagement() {
               <form onSubmit={handleSaveLead}>
                 <div className="modal-body py-3">
                   {formErrors.non_field && (
-                    <div className="alert alert-danger py-2">{formErrors.non_field}</div>
+                    <div className="alert alert-danger border-0 rounded-3 py-2 small" style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#f87171' }}>
+                      {formErrors.non_field}
+                    </div>
                   )}
 
                   <div className="mb-3">
-                    <label htmlFor="lead-name" className="form-label small fw-semibold">Name</label>
+                    <label htmlFor="lead-name" className="form-label small fw-semibold text-secondary">Full Name</label>
                     <input 
                       type="text" 
                       id="lead-name"
                       className={`form-control ${formErrors.name ? 'is-invalid' : ''}`}
                       value={formName}
                       onChange={e => setFormName(e.target.value)}
+                      placeholder="e.g. John Doe"
                       required 
                     />
                     {formErrors.name && <div className="invalid-feedback">{formErrors.name}</div>}
                   </div>
 
                   <div className="mb-3">
-                    <label htmlFor="lead-email" className="form-label small fw-semibold">Email Address</label>
+                    <label htmlFor="lead-email" className="form-label small fw-semibold text-secondary">Email Address</label>
                     <input 
                       type="email" 
                       id="lead-email"
                       className={`form-control ${formErrors.email ? 'is-invalid' : ''}`}
                       value={formEmail}
                       onChange={e => setFormEmail(e.target.value)}
+                      placeholder="john.doe@example.com"
                       required 
                     />
                     {formErrors.email && <div className="invalid-feedback">{formErrors.email}</div>}
                   </div>
 
                   <div className="mb-3">
-                    <label htmlFor="lead-phone" className="form-label small fw-semibold">Phone Number</label>
+                    <label htmlFor="lead-phone" className="form-label small fw-semibold text-secondary">Phone Number</label>
                     <input 
                       type="text" 
                       id="lead-phone"
                       className={`form-control ${formErrors.phone_number ? 'is-invalid' : ''}`}
                       value={formPhone}
                       onChange={e => setFormPhone(e.target.value)}
-                      placeholder="+123456789"
+                      placeholder="e.g. +123456789"
                       required 
                     />
                     {formErrors.phone_number && <div className="invalid-feedback">{formErrors.phone_number}</div>}
@@ -557,47 +715,45 @@ export default function LeadManagement() {
                   <div className="row">
                     <div className="col-6">
                       <div className="mb-3">
-                        <label htmlFor="lead-source" className="form-label small fw-semibold">Source</label>
-                        <select 
-                          id="lead-source"
-                          className="form-select"
+                        <label htmlFor="lead-source" className="form-label small fw-semibold text-secondary">Lead Source</label>
+                        <CustomSelect
                           value={formSource}
-                          onChange={e => setFormSource(e.target.value)}
-                        >
-                          <option value="facebook">Facebook</option>
-                          <option value="google">Google</option>
-                          <option value="organic">Organic</option>
-                        </select>
+                          onChange={setFormSource}
+                          options={[
+                            { value: 'facebook', label: 'Facebook Ads' },
+                            { value: 'google', label: 'Google Search' },
+                            { value: 'organic', label: 'Organic' }
+                          ]}
+                        />
                       </div>
                     </div>
                     
                     <div className="col-6">
                       <div className="mb-3">
-                        <label htmlFor="lead-status" className="form-label small fw-semibold">Status</label>
-                        <select 
-                          id="lead-status"
-                          className="form-select text-capitalize"
+                        <label htmlFor="lead-status" className="form-label small fw-semibold text-secondary">Funnel Status</label>
+                        <CustomSelect
                           value={formStatus}
-                          onChange={e => setFormStatus(e.target.value)}
-                        >
-                          <option value="new">New</option>
-                          <option value="contacted">Contacted</option>
-                          <option value="qualified">Qualified</option>
-                          <option value="closed">Closed</option>
-                        </select>
+                          onChange={setFormStatus}
+                          options={[
+                            { value: 'new', label: 'Incoming' },
+                            { value: 'contacted', label: 'In Touch' },
+                            { value: 'qualified', label: 'Qualified' },
+                            { value: 'closed', label: 'Closed' }
+                          ]}
+                        />
                       </div>
                     </div>
                   </div>
                 </div>
                 
-                <div className="modal-footer border-0 pt-0">
-                  <button type="button" className="btn btn-outline-secondary btn-sm px-3" onClick={() => setShowFormModal(false)}>
+                <div className="modal-footer border-0 pt-0 gap-2">
+                  <button type="button" className="btn btn-outline-secondary btn-sm px-3 py-2 rounded-3" onClick={() => setShowFormModal(false)}>
                     Cancel
                   </button>
-                  <button type="submit" className="btn btn-primary btn-sm px-4 fw-semibold" disabled={formSubmitting}>
+                  <button type="submit" className="btn btn-primary btn-sm px-4 py-2 fw-semibold rounded-3 text-white" disabled={formSubmitting}>
                     {formSubmitting ? (
                       <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-                    ) : "Save Lead"}
+                    ) : "Save Customer"}
                   </button>
                 </div>
               </form>
@@ -608,9 +764,9 @@ export default function LeadManagement() {
 
       {/* Notes Detail Modal */}
       {showNotesModal && activeLeadForNotes && (
-        <div className="modal show d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
-          <div className="modal-dialog modal-dialog-centered">
-            <div className="modal-content glass-card p-2 border-0">
+        <div className="modal show d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', zIndex: 1050 }} onClick={() => setShowNotesModal(false)}>
+          <div className="modal-dialog" onClick={e => e.stopPropagation()}>
+            <div className="modal-content glass-card p-3 border-0">
               <div className="modal-header border-0 pb-0">
                 <h5 className="modal-title fw-bold">Notes for {activeLeadForNotes.name}</h5>
                 <button type="button" className="btn-close" onClick={() => setShowNotesModal(false)}></button>
@@ -618,15 +774,15 @@ export default function LeadManagement() {
               <div className="modal-body py-3">
                 
                 {/* Notes list */}
-                <div className="notes-list overflow-y-auto mb-3 px-1" style={{ maxHeight: '240px' }}>
+                <div className="notes-list overflow-y-auto mb-4 px-1" style={{ maxHeight: '240px' }}>
                   {!activeLeadForNotes.notes || activeLeadForNotes.notes.length === 0 ? (
                     <p className="text-secondary text-center py-4 small">No notes created yet for this lead.</p>
                   ) : (
                     activeLeadForNotes.notes.map(note => (
-                      <div key={note.id} className="p-2 mb-2 rounded bg-body-tertiary border d-flex justify-content-between align-items-start">
+                      <div key={note.id} className="p-3 mb-2 rounded-4 bg-body bg-opacity-25 border border-secondary border-opacity-10 d-flex justify-content-between align-items-start animate-fade-in">
                         <div style={{ flex: 1 }}>
                           <p className="small mb-1 text-break">{note.content}</p>
-                          <span className="text-xxs text-secondary" style={{ fontSize: '10px' }}>
+                          <span className="text-xxs text-secondary">
                             {new Date(note.created_date).toLocaleString(undefined, { 
                               month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' 
                             })}
@@ -634,10 +790,10 @@ export default function LeadManagement() {
                         </div>
                         <button 
                           onClick={() => handleDeleteNote(note.id)} 
-                          className="btn btn-link text-danger p-0 ms-2"
+                          className="btn btn-link text-danger p-0 ms-2 text-decoration-none"
                           title="Delete note"
                         >
-                          <i className="bi bi-x-circle-fill"></i>
+                          <i className="bi bi-x-circle-fill fs-5 opacity-75 hover-opacity-100"></i>
                         </button>
                       </div>
                     ))
@@ -646,8 +802,8 @@ export default function LeadManagement() {
 
                 {/* Add note form */}
                 <form onSubmit={handleAddNote}>
-                  <div className="mb-2">
-                    <label htmlFor="new-note" className="form-label small fw-semibold">Add Follow-up Note</label>
+                  <div className="mb-3">
+                    <label htmlFor="new-note" className="form-label small fw-semibold text-secondary">Add Follow-up Note</label>
                     <textarea 
                       id="new-note"
                       className="form-control form-control-sm"
@@ -659,7 +815,7 @@ export default function LeadManagement() {
                     ></textarea>
                   </div>
                   <div className="d-flex justify-content-end">
-                    <button type="submit" className="btn btn-primary btn-sm px-3 fw-semibold" disabled={noteSubmitting}>
+                    <button type="submit" className="btn btn-primary btn-sm px-4 py-2 fw-semibold rounded-3 text-white" disabled={noteSubmitting}>
                       {noteSubmitting ? "Adding..." : "Add Note"}
                     </button>
                   </div>
@@ -673,9 +829,9 @@ export default function LeadManagement() {
 
       {/* CSV Import Modal */}
       {showCSVModal && (
-        <div className="modal show d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
-          <div className="modal-dialog modal-dialog-centered">
-            <div className="modal-content glass-card p-2 border-0">
+        <div className="modal show d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', zIndex: 1050 }} onClick={() => { setShowCSVModal(false); setCSVImportResult(null); setCSVFile(null); }}>
+          <div className="modal-dialog" onClick={e => e.stopPropagation()}>
+            <div className="modal-content glass-card p-3 border-0">
               <div className="modal-header border-0 pb-0">
                 <h5 className="modal-title fw-bold">Import Leads from CSV</h5>
                 <button type="button" className="btn-close" onClick={() => { setShowCSVModal(false); setCSVImportResult(null); setCSVFile(null); }}></button>
@@ -697,7 +853,7 @@ export default function LeadManagement() {
                   </div>
 
                   {csvImportResult && (
-                    <div className="mt-3 border p-3 rounded bg-body-tertiary">
+                    <div className="mt-3 border border-secondary border-opacity-10 p-3 rounded-4 bg-body bg-opacity-25 animate-fade-in">
                       <h6 className="fw-bold text-success mb-2">
                         Successfully imported {csvImportResult.success_count} leads!
                       </h6>
@@ -721,15 +877,15 @@ export default function LeadManagement() {
                   )}
                 </div>
                 
-                <div className="modal-footer border-0 pt-0">
+                <div className="modal-footer border-0 pt-0 gap-2">
                   <button 
                     type="button" 
-                    className="btn btn-outline-secondary btn-sm px-3" 
+                    className="btn btn-outline-secondary btn-sm px-3 py-2 rounded-3" 
                     onClick={() => { setShowCSVModal(false); setCSVImportResult(null); setCSVFile(null); }}
                   >
                     Close
                   </button>
-                  <button type="submit" className="btn btn-success btn-sm px-4 fw-semibold" disabled={csvSubmitting || !csvFile}>
+                  <button type="submit" className="btn btn-primary btn-sm px-4 py-2 fw-semibold rounded-3 text-white" disabled={csvSubmitting || !csvFile}>
                     {csvSubmitting ? "Importing..." : "Upload & Import"}
                   </button>
                 </div>

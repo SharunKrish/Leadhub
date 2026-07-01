@@ -1,24 +1,34 @@
 import React, { useState, useContext } from 'react';
 import { AuthContext } from '../context/AuthContext';
 import { ThemeContext } from '../context/ThemeContext';
+import logo from '../assets/logo.png';
 
 export default function Login() {
-  const { login } = useContext(AuthContext);
+  const { login, register } = useContext(AuthContext);
   const { isDarkMode, toggleTheme } = useContext(ThemeContext);
   const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [isRegistering, setIsRegistering] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!username.trim() || !password.trim()) {
+    if (!username.trim() || !password.trim() || (isRegistering && !email.trim())) {
       setError("Please fill in all fields.");
       return;
     }
     setError('');
     setSubmitting(true);
-    const res = await login(username, password);
+    
+    let res;
+    if (isRegistering) {
+      res = await register(username.trim(), email.trim(), password);
+    } else {
+      res = await login(username.trim(), password);
+    }
+    
     setSubmitting(false);
     if (!res.success) {
       setError(res.error);
@@ -26,16 +36,24 @@ export default function Login() {
   };
 
   return (
-    <div className="container d-flex align-items-center justify-content-center min-vh-100 animate-fade-in">
-      <div className="card glass-card p-4 shadow-lg w-100" style={{ maxWidth: '420px' }}>
+    <div className="position-relative min-vh-100 w-100 overflow-hidden d-flex align-items-center justify-content-center py-5">
+      {/* Dynamic Glow Bubbles in the background */}
+      <div className="bg-glow-bubble bg-glow-bubble-1"></div>
+      <div className="bg-glow-bubble bg-glow-bubble-2"></div>
+      
+      <div className="card glass-card p-4 p-sm-5 shadow-lg w-100 position-relative animate-fade-in" style={{ maxWidth: '440px', margin: '20px' }}>
+        
+        {/* Top bar inside login card */}
         <div className="d-flex justify-content-between align-items-center mb-4">
           <div className="d-flex align-items-center gap-2">
-            <i className="bi bi-speedometer2 fs-3 text-primary"></i>
-            <h4 className="mb-0 fw-bold">LeadHub</h4>
+            <div className="d-flex align-items-center justify-content-center bg-primary bg-opacity-10 text-primary rounded-3" style={{ width: '40px', height: '40px', border: '1px solid rgba(124, 58, 237, 0.2)' }}>
+              <img src={logo} alt="LeadHub Logo" style={{ width: '24px', height: '24px', objectFit: 'contain' }} />
+            </div>
+            <h4 className="mb-0 fw-bold tracking-tight">LeadHub</h4>
           </div>
           <button 
             type="button" 
-            className="btn btn-sm btn-outline-secondary" 
+            className="btn btn-sm btn-outline-secondary rounded-3" 
             onClick={toggleTheme}
             aria-label="Toggle dark mode"
           >
@@ -43,11 +61,13 @@ export default function Login() {
           </button>
         </div>
         
-        <h3 className="fw-bold mb-1">Sign In</h3>
-        <p className="text-secondary mb-4">Lead Management Dashboard</p>
+        <h2 className="fw-extrabold mb-1">{isRegistering ? "Create Account" : "Welcome back"}</h2>
+        <p className="text-secondary small mb-4">
+          {isRegistering ? "Register your details to manage your leads." : "Enter your credentials to access the analytics suite."}
+        </p>
         
         {error && (
-          <div className="alert alert-danger py-2 px-3 small d-flex align-items-center gap-2" role="alert">
+          <div className="alert alert-danger py-2 px-3 small border-0 d-flex align-items-center gap-2 mb-4 rounded-3" role="alert" style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#f87171' }}>
             <i className="bi bi-exclamation-triangle-fill"></i>
             <div>{error}</div>
           </div>
@@ -55,10 +75,10 @@ export default function Login() {
 
         <form onSubmit={handleSubmit}>
           <div className="mb-3">
-            <label htmlFor="username" className="form-label small fw-semibold">Username</label>
+            <label htmlFor="username" className="form-label small fw-semibold text-secondary">Username</label>
             <div className="input-group">
-              <span className="input-group-text bg-transparent border-end-0">
-                <i className="bi bi-person text-secondary"></i>
+              <span className="input-group-text bg-transparent border-end-0 text-secondary">
+                <i className="bi bi-person"></i>
               </span>
               <input 
                 type="text" 
@@ -66,17 +86,39 @@ export default function Login() {
                 className="form-control border-start-0" 
                 value={username}
                 onChange={e => setUsername(e.target.value)}
-                placeholder="e.g. admin"
+                placeholder="Enter username"
                 required 
               />
             </div>
           </div>
 
+          {isRegistering && (
+            <div className="mb-3 animate-fade-in">
+              <label htmlFor="email" className="form-label small fw-semibold text-secondary">Email Address</label>
+              <div className="input-group">
+                <span className="input-group-text bg-transparent border-end-0 text-secondary">
+                  <i className="bi bi-envelope"></i>
+                </span>
+                <input 
+                  type="email" 
+                  id="email" 
+                  className="form-control border-start-0" 
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  placeholder="Enter email address"
+                  required={isRegistering}
+                />
+              </div>
+            </div>
+          )}
+
           <div className="mb-4">
-            <label htmlFor="password" className="form-label small fw-semibold">Password</label>
+            <div className="d-flex justify-content-between align-items-center mb-1">
+              <label htmlFor="password" className="form-label small fw-semibold text-secondary mb-0">Password</label>
+            </div>
             <div className="input-group">
-              <span className="input-group-text bg-transparent border-end-0">
-                <i className="bi bi-lock text-secondary"></i>
+              <span className="input-group-text bg-transparent border-end-0 text-secondary">
+                <i className="bi bi-lock"></i>
               </span>
               <input 
                 type="password" 
@@ -84,7 +126,7 @@ export default function Login() {
                 className="form-control border-start-0" 
                 value={password}
                 onChange={e => setPassword(e.target.value)}
-                placeholder="e.g. admin"
+                placeholder="Enter password"
                 required 
               />
             </div>
@@ -92,21 +134,31 @@ export default function Login() {
 
           <button 
             type="submit" 
-            className="btn btn-primary w-100 py-2 fw-semibold mb-3"
+            className="btn btn-primary w-100 py-3 fw-semibold mb-4 text-white d-flex align-items-center justify-content-center gap-2"
             disabled={submitting}
           >
             {submitting ? (
-              <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-            ) : "Log In"}
+              <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+            ) : (
+              <>
+                <span>{isRegistering ? "Sign Up & Launch" : "Sign In to Dashboard"}</span>
+                <i className="bi bi-arrow-right-short fs-5"></i>
+              </>
+            )}
           </button>
         </form>
 
-        <div className="mt-3 p-3 bg-body-tertiary rounded-3 border">
-          <div className="small fw-semibold text-secondary mb-1">
-            <i className="bi bi-info-circle me-1"></i> Demo Credentials
-          </div>
-          <div className="small text-secondary">Username: <code className="bg-transparent p-0 text-primary fw-bold">admin</code></div>
-          <div className="small text-secondary">Password: <code className="bg-transparent p-0 text-primary fw-bold">admin</code></div>
+        <div className="text-center mt-3">
+          <button 
+            type="button" 
+            className="btn btn-link btn-sm text-primary text-decoration-none fw-semibold"
+            onClick={() => {
+              setIsRegistering(!isRegistering);
+              setError('');
+            }}
+          >
+            {isRegistering ? "Already have an account? Sign In" : "Don't have an account? Create Account"}
+          </button>
         </div>
       </div>
     </div>

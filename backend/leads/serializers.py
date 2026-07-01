@@ -28,10 +28,24 @@ class LeadSerializer(serializers.ModelSerializer):
     def validate_email(self, value):
         # Ensure email is in lowercase for normalization
         value = value.lower().strip()
-        # DRF UniqueValidator automatically handles the unique check, but we can do extra checks if needed
         return value
 
     def validate_name(self, value):
         if not value.strip():
             raise serializers.ValidationError("Name cannot be empty.")
         return value.strip()
+
+    def validate(self, attrs):
+        email = attrs.get('email')
+        if email:
+            email = email.lower().strip()
+            attrs['email'] = email
+            
+            request = self.context.get('request')
+            if request and request.user.is_authenticated:
+                queryset = Lead.objects.filter(user=request.user, email=email)
+                if self.instance:
+                    queryset = queryset.exclude(pk=self.instance.pk)
+                if queryset.exists():
+                    raise serializers.ValidationError({"email": "A lead with this email address already exists in your account."})
+        return attrs

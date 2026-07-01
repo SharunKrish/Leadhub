@@ -10,6 +10,11 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.pagination import PageNumberPagination
 
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.authentication import TokenAuthentication
+from django.contrib.auth.models import User
+from rest_framework.authtoken.models import Token
+
 from .models import Lead, LeadNote
 from .serializers import LeadSerializer, LeadNoteSerializer
 
@@ -21,9 +26,11 @@ class StandardResultsSetPagination(PageNumberPagination):
 class LeadViewSet(viewsets.ModelViewSet):
     serializer_class = LeadSerializer
     pagination_class = StandardResultsSetPagination
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [TokenAuthentication]
 
     def get_queryset(self):
-        queryset = Lead.objects.all().prefetch_related('notes')
+        queryset = Lead.objects.filter(user=self.request.user).prefetch_related('notes')
         
         # Filtering by search query (name, email, phone number)
         q = self.request.query_params.get('q', None)
@@ -53,6 +60,9 @@ class LeadViewSet(viewsets.ModelViewSet):
                 queryset = queryset.order_by(ordering)
                 
         return queryset
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
 
     @action(detail=False, methods=['get'], url_path='export')
     def export_excel(self, request):
@@ -111,7 +121,7 @@ class LeadViewSet(viewsets.ModelViewSet):
                 continue
             
             name = row[0].strip()
-            email = row[1].strip()
+            email = row[1].strip().lower()
             phone = row[2].strip()
             
             source = 'organic'
@@ -131,14 +141,14 @@ class LeadViewSet(viewsets.ModelViewSet):
             }
             
             # If lead already exists, update it, otherwise create new
-            lead_instance = Lead.objects.filter(email=email).first()
+            lead_instance = Lead.objects.filter(email=email, user=request.user).first()
             if lead_instance:
-                serializer = LeadSerializer(lead_instance, data=data)
+                serializer = LeadSerializer(lead_instance, data=data, context={'request': request})
             else:
-                serializer = LeadSerializer(data=data)
+                serializer = LeadSerializer(data=data, context={'request': request})
                 
             if serializer.is_valid():
-                serializer.save()
+                serializer.save(user=request.user)
                 success_count += 1
             else:
                 err_msg = ", ".join([f"{k}: {v[0]}" for k, v in serializer.errors.items()])
@@ -149,20 +159,39 @@ class LeadViewSet(viewsets.ModelViewSet):
             "errors": errors
         }, status=status.HTTP_200_OK)
 
+    @action(detail=False, methods=['delete'], url_path='delete-all')
+    def delete_all(self, request):
+        count, _ = Lead.objects.filter(user=request.user).delete()
+        return Response({"message": f"Successfully deleted {count} leads."}, status=status.HTTP_200_OK)
+
 class LeadNoteViewSet(viewsets.ModelViewSet):
-    queryset = LeadNote.objects.all()
     serializer_class = LeadNoteSerializer
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [TokenAuthentication]
+
+    def get_queryset(self):
+        return LeadNote.objects.filter(lead__user=self.request.user)
+
+    def perform_create(self, serializer):
+        lead = serializer.validated_data['lead']
+        if lead.user != self.request.user:
+            raise serializers.ValidationError("You do not own this lead.")
+        serializer.save()
 
 class DashboardStatsView(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [TokenAuthentication]
+
     def get(self, request):
-        total_leads = Lead.objects.count()
+        user_leads = Lead.objects.filter(user=request.user)
+        total_leads = user_leads.count()
         
         # Today's lead count
         today = timezone.localtime(timezone.now()).date()
-        today_leads = Lead.objects.filter(created_date__date=today).count()
+        today_leads = user_leads.filter(created_date__date=today).count()
         
         # Distribution by source
-        source_counts = Lead.objects.values('lead_source').annotate(count=Count('id'))
+        source_counts = user_leads.values('lead_source').annotate(count=Count('id'))
         source_data = {
             'facebook': 0,
             'google': 0,
@@ -172,7 +201,7 @@ class DashboardStatsView(APIView):
             source_data[item['lead_source']] = item['count']
             
         # Summary by status
-        status_counts = Lead.objects.values('lead_status').annotate(count=Count('id'))
+        status_counts = user_leads.values('lead_status').annotate(count=Count('id'))
         status_data = {
             'new': 0,
             'contacted': 0,
@@ -189,8 +218,7 @@ class DashboardStatsView(APIView):
             'status_summary': status_data
         }, status=status.HTTP_200_OK)
 
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.authentication import TokenAuthentication
+
 
 class UserProfileView(APIView):
     permission_classes = [IsAuthenticated]
@@ -203,6 +231,24 @@ class UserProfileView(APIView):
             "is_superuser": request.user.is_superuser
         })
 
+    def put(self, request):
+        user = request.user
+        email = request.data.get('email', '')
+        password = request.data.get('password', '')
+        
+        if email:
+            user.email = email
+            
+        if password:
+            user.set_password(password)
+            
+        user.save()
+        return Response({
+            "username": user.username,
+            "email": user.email,
+            "is_superuser": user.is_superuser
+        })
+
 class LogoutView(APIView):
     permission_classes = [IsAuthenticated]
     authentication_classes = [TokenAuthentication]
@@ -213,4 +259,30 @@ class LogoutView(APIView):
             return Response({"success": "Successfully logged out."}, status=status.HTTP_200_OK)
         except Exception as e:
             return Response({"error": "Failed to logout or no token found."}, status=status.HTTP_400_BAD_REQUEST)
+
+class RegisterView(APIView):
+    def post(self, request):
+        username = request.data.get('username')
+        password = request.data.get('password')
+        email = request.data.get('email', '')
+
+        if not username or not password:
+            return Response({"error": "Username and password are required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Check username
+        if User.objects.filter(username__iexact=username).exists():
+            return Response({"error": "Username is already taken."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            # Create user
+            user = User.objects.create_user(username=username, password=password, email=email)
+            # Create token
+            token, created = Token.objects.get_or_create(user=user)
+            return Response({
+                "token": token.key,
+                "username": user.username,
+                "email": user.email
+            }, status=status.HTTP_201_CREATED)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 

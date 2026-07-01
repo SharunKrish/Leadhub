@@ -1,7 +1,7 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from rest_framework.authtoken.views import obtain_auth_token
-from .views import LeadViewSet, LeadNoteViewSet, DashboardStatsView, UserProfileView, LogoutView
+from .views import LeadViewSet, LeadNoteViewSet, DashboardStatsView, UserProfileView, LogoutView, RegisterView
 
 router = DefaultRouter()
 router.register(r'leads', LeadViewSet, basename='lead')
@@ -13,5 +13,6 @@ urlpatterns = [
     path('auth/login/', obtain_auth_token, name='login'),
     path('auth/logout/', LogoutView.as_view(), name='logout'),
     path('auth/user/', UserProfileView.as_view(), name='user-profile'),
+    path('auth/register/', RegisterView.as_view(), name='register'),
 ]
 

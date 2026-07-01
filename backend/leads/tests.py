@@ -1,11 +1,22 @@
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
+from django.contrib.auth.models import User
+from rest_framework.authtoken.models import Token
 from .models import Lead, LeadNote
 
 class LeadAPITests(APITestCase):
     def setUp(self):
+        self.user = User.objects.create_user(
+            username="testuser",
+            password="testpassword",
+            email="testuser@example.com"
+        )
+        self.token = Token.objects.create(user=self.user).key
+        self.client.credentials(HTTP_AUTHORIZATION='Token ' + self.token)
+
         self.lead1 = Lead.objects.create(
+            user=self.user,
             name="John Doe",
             email="john@example.com",
             phone_number="+1234567890",
@@ -13,6 +24,7 @@ class LeadAPITests(APITestCase):
             lead_status="new"
         )
         self.lead2 = Lead.objects.create(
+            user=self.user,
             name="Jane Smith",
             email="jane@example.com",
             phone_number="+1987654321",
@@ -164,4 +176,26 @@ class AuthAPITests(APITestCase):
         # 4. Verify profile access is now unauthorized
         profile_response_after_logout = self.client.get(profile_url)
         self.assertEqual(profile_response_after_logout.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_register_success(self):
+        url = reverse('register')
+        data = {
+            "username": "newregistereduser",
+            "password": "newpassword",
+            "email": "new@example.com"
+        }
+        response = self.client.post(url, data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertIn('token', response.data)
+        self.assertEqual(response.data['username'], "newregistereduser")
+
+    def test_register_duplicate_username(self):
+        url = reverse('register')
+        data = {
+            "username": "testuser",
+            "password": "somepassword",
+            "email": "other@example.com"
+        }
+        response = self.client.post(url, data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 

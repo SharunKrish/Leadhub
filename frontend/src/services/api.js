@@ -63,5 +63,18 @@ export const getExcelExportUrl = (params = {}) => {
     }
   });
   const queryString = searchParams.toString();
-  return `/api/leads/export/${queryString ? `?${queryString}` : ''}`;
+  const baseUrl = import.meta.env.VITE_API_BASE_URL || '';
+  return `${baseUrl}/api/leads/export/${queryString ? `?${queryString}` : ''}`;
+};
+
+// Update user profile details
+export const updateUserProfile = async (data) => {
+  const response = await axios.put('/api/auth/user/', data);
+  return response.data;
+};
+
+// Delete all leads of the current user
+export const deleteAllLeads = async () => {
+  const response = await axios.delete('/api/leads/delete-all/');
+  return response.data;
 };
