@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { 
   getLeads, 
   createLead, 
@@ -117,6 +118,22 @@ export default function LeadManagement() {
   useEffect(() => {
     fetchLeadsList();
   }, [debouncedSearch, source, status, ordering, page]);
+
+  // Lock body scroll when any modal is open to ensure proper scroll behavior
+  useEffect(() => {
+    const isAnyModalOpen = showFormModal || showNotesModal || showCSVModal;
+    if (isAnyModalOpen) {
+      document.body.classList.add('modal-open');
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.classList.remove('modal-open');
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.classList.remove('modal-open');
+      document.body.style.overflow = '';
+    };
+  }, [showFormModal, showNotesModal, showCSVModal]);
 
   const fetchLeadsList = async () => {
     try {
@@ -652,7 +669,7 @@ export default function LeadManagement() {
       )}
 
       {/* Lead Create/Edit Modal */}
-      {showFormModal && (
+      {showFormModal && createPortal(
         <div className="modal show d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', zIndex: 1050 }} onClick={() => setShowFormModal(false)}>
           <div className="modal-dialog" onClick={e => e.stopPropagation()}>
             <div className="modal-content glass-card p-3 border-0" style={{ overflow: 'visible' }}>
@@ -759,11 +776,12 @@ export default function LeadManagement() {
               </form>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Notes Detail Modal */}
-      {showNotesModal && activeLeadForNotes && (
+      {showNotesModal && activeLeadForNotes && createPortal(
         <div className="modal show d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', zIndex: 1050 }} onClick={() => setShowNotesModal(false)}>
           <div className="modal-dialog" onClick={e => e.stopPropagation()}>
             <div className="modal-content glass-card p-3 border-0">
@@ -824,11 +842,12 @@ export default function LeadManagement() {
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* CSV Import Modal */}
-      {showCSVModal && (
+      {showCSVModal && createPortal(
         <div className="modal show d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', zIndex: 1050 }} onClick={() => { setShowCSVModal(false); setCSVImportResult(null); setCSVFile(null); }}>
           <div className="modal-dialog" onClick={e => e.stopPropagation()}>
             <div className="modal-content glass-card p-3 border-0">
@@ -892,7 +911,8 @@ export default function LeadManagement() {
               </form>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
